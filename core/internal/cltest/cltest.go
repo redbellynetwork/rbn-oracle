@@ -35,6 +35,9 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
+	coretypes "github.com/smartcontractkit/chainlink-common/pkg/types/core"
+	types2 "github.com/smartcontractkit/chainlink/v2/core/capabilities/remote/types"
+	p2ptypes "github.com/smartcontractkit/chainlink/v2/core/services/p2p/types"
 	ocrtypes "github.com/smartcontractkit/libocr/offchainreporting/types"
 
 	"github.com/smartcontractkit/chainlink-common/pkg/loop"
@@ -318,6 +321,30 @@ func NewApplicationWithConfig(t testing.TB, cfg chainlink.GeneralConfig, flagsAn
 		auditLogger = audit.NoopLogger
 	}
 
+	var capabilitiesRegistry coretypes.CapabilitiesRegistry
+	for _, dep := range flagsAndDeps {
+		capabilitiesRegistry, _ = dep.(coretypes.CapabilitiesRegistry)
+		if capabilitiesRegistry != nil {
+			break
+		}
+	}
+
+	var dispatcher types2.Dispatcher
+	for _, dep := range flagsAndDeps {
+		dispatcher, _ = dep.(types2.Dispatcher)
+		if dispatcher != nil {
+			break
+		}
+	}
+
+	var peerWrapper p2ptypes.PeerWrapper
+	for _, dep := range flagsAndDeps {
+		peerWrapper, _ = dep.(p2ptypes.PeerWrapper)
+		if peerWrapper != nil {
+			break
+		}
+	}
+
 	url := cfg.Database().URL()
 	db, err := pg.NewConnection(url.String(), cfg.Database().Dialect(), cfg.Database())
 	require.NoError(t, err)
@@ -356,10 +383,11 @@ func NewApplicationWithConfig(t testing.TB, cfg chainlink.GeneralConfig, flagsAn
 	})
 
 	relayerFactory := chainlink.RelayerFactory{
-		Logger:       lggr,
-		LoopRegistry: loopRegistry,
-		GRPCOpts:     loop.GRPCOpts{},
-		MercuryPool:  mercuryPool,
+		Logger:               lggr,
+		LoopRegistry:         loopRegistry,
+		GRPCOpts:             loop.GRPCOpts{},
+		MercuryPool:          mercuryPool,
+		CapabilitiesRegistry: capabilitiesRegistry,
 	}
 
 	evmOpts := chainlink.EVMFactoryConfig{
@@ -411,6 +439,7 @@ func NewApplicationWithConfig(t testing.TB, cfg chainlink.GeneralConfig, flagsAn
 		}
 		initOps = append(initOps, chainlink.InitStarknet(testCtx, relayerFactory, starkCfg))
 	}
+
 	relayChainInterops, err := chainlink.NewCoreRelayerChainInteroperators(initOps...)
 	if err != nil {
 		t.Fatal(err)
@@ -431,7 +460,11 @@ func NewApplicationWithConfig(t testing.TB, cfg chainlink.GeneralConfig, flagsAn
 		SecretGenerator:            MockSecretGenerator{},
 		LoopRegistry:               plugins.NewLoopRegistry(lggr, nil),
 		MercuryPool:                mercuryPool,
+		CapabilitiesRegistry:       capabilitiesRegistry,
+		CapabilitiesDispatcher:     dispatcher,
+		CapabilitiesPeerWrapper:    peerWrapper,
 	})
+
 	require.NoError(t, err)
 	app := appInstance.(*chainlink.ChainlinkApplication)
 	ta := &TestApplication{
