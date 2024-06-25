@@ -459,7 +459,7 @@ func TestIntegration_LLO_Dummy(t *testing.T) {
 		relayConfig := fmt.Sprintf(`chainID = "%s"
 configTracker = {
 	configDigest = "%s",
-	configCoung = 1,
+	configCount = 0,
 	signers = %s,
 	transmitters = %s,
 	f = %d,

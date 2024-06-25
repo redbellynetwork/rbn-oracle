@@ -89,7 +89,7 @@ func (d *dataSource) Observe(ctx context.Context, streamIDs map[llotypes.StreamI
 					}
 				}
 			} else {
-				d.lggr.Errorw(fmt.Sprintf("Missing stream: %q", streamID), "streamID", streamID)
+				d.lggr.Errorw(fmt.Sprintf("Missing stream: %d", streamID), "streamID", streamID)
 				promMissingStreamCount.WithLabelValues(fmt.Sprintf("%d", streamID)).Inc()
 			}
 
