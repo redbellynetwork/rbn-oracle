@@ -58,7 +58,7 @@ func (t *transmitter) Transmit(
 	sigs []types.AttributedOnchainSignature,
 ) error {
 	transmitSuccessCount.Inc()
-	t.lggr.Debugw("Transmit", "digest", digest, "seqNr", seqNr, "report.Report", report.Report, "report.Info", report.Info, "sigs", sigs)
+	t.lggr.Infow("Transmit (dummy)", "digest", digest, "seqNr", seqNr, "report.Report", report.Report, "report.Info", report.Info, "sigs", sigs)
 	return nil
 }
 
