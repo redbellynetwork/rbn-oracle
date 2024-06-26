@@ -69,7 +69,7 @@ func (t *transmitter) Transmit(
 		lggr = lggr.With(
 			"report.Report.ConfigDigest", r.ConfigDigest,
 			"report.Report.ChainSelector", r.ChainSelector,
-			"report.Report.SeqNr uint64", r.SeqNr,
+			"report.Report.SeqNr", r.SeqNr,
 			"report.Report.ChannelID", r.ChannelID,
 			"report.Report.ValidAfterSeconds", r.ValidAfterSeconds,
 			"report.Report.ValidUntilSeconds", r.ValidUntilSeconds,
