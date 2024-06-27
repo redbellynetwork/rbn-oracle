@@ -8,6 +8,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"golang.org/x/exp/maps"
 
 	llotypes "github.com/smartcontractkit/chainlink-common/pkg/types/llo"
 	"github.com/smartcontractkit/chainlink-data-streams/llo"
@@ -59,6 +60,7 @@ func newDataSource(lggr logger.Logger, registry Registry) llo.DataSource {
 
 // Observe looks up all streams in the registry and returns a map of stream ID => value
 func (d *dataSource) Observe(ctx context.Context, streamIDs map[llotypes.StreamID]struct{}) (llo.StreamValues, error) {
+	// TODO: pass seqnr for more helpful logging
 	var wg sync.WaitGroup
 	wg.Add(len(streamIDs))
 	sv := make(llo.StreamValues)
@@ -107,14 +109,14 @@ func (d *dataSource) Observe(ctx context.Context, streamIDs map[llotypes.StreamI
 	wg.Wait()
 
 	if len(errors) > 0 {
-		strmIDs := make([]streams.StreamID, 0, len(errors))
+		strmIDs := make([]streams.StreamID, len(errors))
 		for i, e := range errors {
 			strmIDs[i] = e.id
 		}
 		d.lggr.Warnw("Observation failed for streams", "streamIDs", strmIDs, "errors", errors)
 	}
 
-	d.lggr.Debugw("Observed streams", "streamIDs", streamIDs, "values", sv)
+	d.lggr.Debugw("Observation succeeded for streams", "streamIDs", maps.Keys(sv), "values", sv)
 
 	return sv, nil
 }
