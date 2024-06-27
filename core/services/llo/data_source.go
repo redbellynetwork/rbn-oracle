@@ -13,6 +13,7 @@ import (
 	"github.com/smartcontractkit/chainlink-data-streams/llo"
 
 	"github.com/smartcontractkit/chainlink/v2/core/logger"
+	"github.com/smartcontractkit/chainlink/v2/core/services/pipeline"
 	"github.com/smartcontractkit/chainlink/v2/core/services/streams"
 )
 
@@ -31,16 +32,18 @@ var (
 	)
 )
 
-type ErrMissingStream struct {
-	id string
-}
-
 type Registry interface {
 	Get(streamID streams.StreamID) (strm streams.Stream, exists bool)
 }
 
-func (e ErrMissingStream) Error() string {
-	return fmt.Sprintf("missing stream definition for: %q", e.id)
+type ErrObservationFailed struct {
+	id  streams.StreamID
+	err string
+	run *pipeline.Run
+}
+
+func (e ErrObservationFailed) Error() string {
+	return e.err
 }
 
 var _ llo.DataSource = &dataSource{}
@@ -59,7 +62,9 @@ func (d *dataSource) Observe(ctx context.Context, streamIDs map[llotypes.StreamI
 	var wg sync.WaitGroup
 	wg.Add(len(streamIDs))
 	sv := make(llo.StreamValues)
-	var mu sync.Mutex
+	var svmu sync.Mutex
+	var errors []ErrObservationFailed
+	var errmu sync.Mutex
 
 	d.lggr.Debugw("Observing streams", "streamIDs", streamIDs)
 
@@ -73,11 +78,9 @@ func (d *dataSource) Observe(ctx context.Context, streamIDs map[llotypes.StreamI
 			if exists {
 				run, trrs, err := stream.Run(ctx)
 				if err != nil {
-					var runID int64
-					if run != nil {
-						runID = run.ID
-					}
-					d.lggr.Debugw("Observation failed for stream", "err", err, "streamID", streamID, "runID", runID)
+					errmu.Lock()
+					errors = append(errors, ErrObservationFailed{run: run, id: streamID, err: fmt.Errorf("observation failed for stream %d: %w", streamID, err).Error()})
+					errmu.Unlock()
 					promObservationErrorCount.WithLabelValues(fmt.Sprintf("%d", streamID)).Inc()
 				} else {
 					// TODO: support types other than *big.Int
@@ -89,17 +92,27 @@ func (d *dataSource) Observe(ctx context.Context, streamIDs map[llotypes.StreamI
 					}
 				}
 			} else {
-				d.lggr.Errorw(fmt.Sprintf("Missing stream: %d", streamID), "streamID", streamID)
+				errmu.Lock()
+				errors = append(errors, ErrObservationFailed{id: streamID, err: fmt.Sprintf("missing stream: %d", streamID)})
+				errmu.Unlock()
 				promMissingStreamCount.WithLabelValues(fmt.Sprintf("%d", streamID)).Inc()
 			}
 
-			mu.Lock()
-			defer mu.Unlock()
+			svmu.Lock()
+			defer svmu.Unlock()
 			sv[streamID] = res
 		}(streamID)
 	}
 
 	wg.Wait()
+
+	if len(errors) > 0 {
+		strmIDs := make([]streams.StreamID, 0, len(errors))
+		for i, e := range errors {
+			strmIDs[i] = e.id
+		}
+		d.lggr.Warnw("Observation failed for streams", "streamIDs", strmIDs, "errors", errors)
+	}
 
 	d.lggr.Debugw("Observed streams", "streamIDs", streamIDs, "values", sv)
 
