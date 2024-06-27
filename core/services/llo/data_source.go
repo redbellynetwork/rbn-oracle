@@ -47,6 +47,10 @@ func (e ErrObservationFailed) Error() string {
 	return e.err
 }
 
+func (e ErrObservationFailed) String() string {
+	return e.err
+}
+
 var _ llo.DataSource = &dataSource{}
 
 type dataSource struct {
@@ -110,7 +114,7 @@ func (d *dataSource) Observe(ctx context.Context, streamIDs map[llotypes.StreamI
 
 	var failedStreamIDs []streams.StreamID
 	if len(errors) > 0 {
-		failedStreamIDs := make([]streams.StreamID, len(errors))
+		failedStreamIDs = make([]streams.StreamID, len(errors))
 		for i, e := range errors {
 			failedStreamIDs[i] = e.id
 		}
