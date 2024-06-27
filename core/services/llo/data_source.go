@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sort"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"golang.org/x/exp/maps"
 
 	llotypes "github.com/smartcontractkit/chainlink-common/pkg/types/llo"
 	"github.com/smartcontractkit/chainlink-data-streams/llo"
@@ -108,15 +108,24 @@ func (d *dataSource) Observe(ctx context.Context, streamIDs map[llotypes.StreamI
 
 	wg.Wait()
 
+	var failedStreamIDs []streams.StreamID
 	if len(errors) > 0 {
-		strmIDs := make([]streams.StreamID, len(errors))
+		failedStreamIDs := make([]streams.StreamID, len(errors))
 		for i, e := range errors {
-			strmIDs[i] = e.id
+			failedStreamIDs[i] = e.id
 		}
-		d.lggr.Warnw("Observation failed for streams", "streamIDs", strmIDs, "errors", errors)
+		sort.Slice(failedStreamIDs, func(i, j int) bool { return failedStreamIDs[i] < failedStreamIDs[j] })
+		d.lggr.Warnw("Observation failed for streams", "streamIDs", failedStreamIDs, "errors", errors)
 	}
 
-	d.lggr.Debugw("Observation succeeded for streams", "streamIDs", maps.Keys(sv), "values", sv)
+	successes := make([]streams.StreamID, 0, len(sv))
+	for strmID, res := range sv {
+		if res.Valid {
+			successes = append(successes, strmID)
+		}
+	}
+	sort.Slice(successes, func(i, j int) bool { return successes[i] < successes[j] })
+	d.lggr.Debugw("Observation complete", "successfulStreamIDs", successes, "failedStreamIDs", failedStreamIDs, "values", sv)
 
 	return sv, nil
 }
