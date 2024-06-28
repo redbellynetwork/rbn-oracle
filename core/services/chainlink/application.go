@@ -243,7 +243,25 @@ func NewApplication(opts ApplicationOpts) (Application, error) {
 		registrySyncer.AddLauncher(wfLauncher)
 
 		getLocalNode = wfLauncher.LocalNode
+
+		// We get the underlying implementation of the registry to set the GetLocalNode function.
+		//
+		// The rationale behind this is that the capability registry needs to have serializable methods since it's passed around to standard-capabilities as a GRPC service.
+		if r, ok := opts.CapabilitiesRegistry.(*capabilities.Registry); ok {
+			r.SetGetLocalNodeFunc(getLocalNode)
+		} else {
+			globalLogger.Warn("CapabilitiesRegistry is not a *capabilities.Registry, GetLocalNode will not be set")
+		}
 		srvcs = append(srvcs, dispatcher, wfLauncher, registrySyncer)
+	} else {
+		if r, ok := opts.CapabilitiesRegistry.(*capabilities.Registry); ok {
+			// Peering isn't enabled, so we're not part of a DON.
+			r.SetGetLocalNodeFunc(func(ctx context.Context) (pkgcapabilities.Node, error) {
+				return pkgcapabilities.Node{}, nil
+			})
+		} else {
+			globalLogger.Warn("CapabilitiesRegistry is not a *capabilities.Registry, GetLocalNode will not be set")
+		}
 	}
 
 	// LOOPs can be created as options, in the  case of LOOP relayers, or

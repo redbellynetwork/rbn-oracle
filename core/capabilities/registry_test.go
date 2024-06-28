@@ -59,6 +59,18 @@ func TestRegistry(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, cs, 1)
 	assert.Equal(t, c, cs[0])
+
+	// should error when we dont set the local node getter func
+	_, err = r.GetLocalNode(ctx)
+	assert.True(t, errors.Is(err, coreCapabilities.ErrGetLocalNodeFuncNotSet))
+
+	// otherwise should return an empty node
+	r.SetGetLocalNodeFunc(func(ctx context.Context) (capabilities.Node, error) {
+		return capabilities.Node{}, nil
+	})
+	n, err := r.GetLocalNode(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, capabilities.Node{}, n)
 }
 
 func TestRegistry_NoDuplicateIDs(t *testing.T) {

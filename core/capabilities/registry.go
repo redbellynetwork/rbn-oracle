@@ -7,19 +7,42 @@ import (
 	"sync"
 
 	"github.com/smartcontractkit/chainlink-common/pkg/capabilities"
+	"github.com/smartcontractkit/chainlink-common/pkg/types/core"
 	"github.com/smartcontractkit/chainlink/v2/core/logger"
 )
 
 var (
 	ErrCapabilityAlreadyExists = errors.New("capability already exists")
+	ErrGetLocalNodeFuncNotSet  = errors.New("GetLocalNodeFunc not set")
 )
 
 // Registry is a struct for the registry of capabilities.
 // Registry is safe for concurrent use.
 type Registry struct {
-	lggr logger.Logger
-	m    map[string]capabilities.BaseCapability
-	mu   sync.RWMutex
+	lggr         logger.Logger
+	m            map[string]capabilities.BaseCapability
+	mu           sync.RWMutex
+	getLocalNode func(ctx context.Context) (capabilities.Node, error)
+}
+
+var _ core.CapabilitiesRegistry = (*Registry)(nil)
+
+func (r *Registry) SetGetLocalNodeFunc(f func(ctx context.Context) (capabilities.Node, error)) {
+	r.getLocalNode = f
+}
+
+func (r *Registry) GetLocalNode(ctx context.Context) (capabilities.Node, error) {
+	// This should only be nil if cfg.Capabilities().Peering() is false
+	// in which case it means that we're running a single node rather than being
+	// part of a DON
+	//
+	// We don't give it an empty default so that calls of GetLocalNode don't accidentally
+	// think they're not part of a DON when in actuality, we forgot to set the GetLocalNodeFunc
+	if r.getLocalNode == nil {
+		return capabilities.Node{}, ErrGetLocalNodeFuncNotSet
+	}
+
+	return r.getLocalNode(ctx)
 }
 
 // Get gets a capability from the registry.

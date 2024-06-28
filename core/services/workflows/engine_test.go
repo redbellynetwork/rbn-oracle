@@ -101,7 +101,6 @@ func newTestDBStore(t *testing.T, clock clockwork.Clock) store.Store {
 
 // newTestEngine creates a new engine with some test defaults.
 func newTestEngine(t *testing.T, reg *coreCap.Registry, spec string, opts ...func(c *Config)) (*Engine, *testHooks) {
-	peerID := p2ptypes.PeerID{}
 	initFailed := make(chan struct{})
 	initSuccessful := make(chan struct{})
 	executionFinished := make(chan string, 100)
@@ -111,16 +110,8 @@ func newTestEngine(t *testing.T, reg *coreCap.Registry, spec string, opts ...fun
 		Lggr:       logger.TestLogger(t),
 		Registry:   reg,
 		Spec:       spec,
-		GetLocalNode: func(ctx context.Context) (capabilities.Node, error) {
-			return capabilities.Node{
-				WorkflowDON: capabilities.DON{
-					ID: "00010203",
-				},
-				PeerID: &peerID,
-			}, nil
-		},
 		maxRetries: 1,
-		retryMs:    100,
+		retryMs:    1,
 		afterInit: func(success bool) {
 			if success {
 				close(initSuccessful)
@@ -216,11 +207,18 @@ func (m *mockTriggerCapability) RegisterTrigger(ctx context.Context, req capabil
 func (m *mockTriggerCapability) UnregisterTrigger(ctx context.Context, req capabilities.CapabilityRequest) error {
 	return nil
 }
+func testRegistry(t *testing.T) *coreCap.Registry {
+	reg := coreCap.NewRegistry(logger.TestLogger(t))
+	reg.SetGetLocalNodeFunc(func(ctx context.Context) (capabilities.Node, error) {
+		return capabilities.Node{}, nil
+	})
+
+	return reg
+}
 
 func TestEngineWithHardcodedWorkflow(t *testing.T) {
 	ctx := testutils.Context(t)
-	reg := coreCap.NewRegistry(logger.TestLogger(t))
-
+	reg := testRegistry(t)
 	trigger, cr := mockTrigger(t)
 
 	require.NoError(t, reg.Add(ctx, trigger))
@@ -411,7 +409,7 @@ func mockTarget() *mockCapability {
 func TestEngine_ErrorsTheWorkflowIfAStepErrors(t *testing.T) {
 	t.Parallel()
 	ctx := testutils.Context(t)
-	reg := coreCap.NewRegistry(logger.TestLogger(t))
+	reg := testRegistry(t)
 
 	trigger, _ := mockTrigger(t)
 
@@ -435,7 +433,7 @@ func TestEngine_ErrorsTheWorkflowIfAStepErrors(t *testing.T) {
 func TestEngine_GracefulEarlyTermination(t *testing.T) {
 	t.Parallel()
 	ctx := testutils.Context(t)
-	reg := coreCap.NewRegistry(logger.TestLogger(t))
+	reg := testRegistry(t)
 
 	trigger, _ := mockTrigger(t)
 
@@ -526,7 +524,7 @@ func mockAction(t *testing.T) (*mockCapability, values.Value) {
 func TestEngine_MultiStepDependencies(t *testing.T) {
 	t.Parallel()
 	ctx := testutils.Context(t)
-	reg := coreCap.NewRegistry(logger.TestLogger(t))
+	reg := testRegistry(t)
 
 	trigger, cr := mockTrigger(t)
 
@@ -567,7 +565,7 @@ func TestEngine_MultiStepDependencies(t *testing.T) {
 func TestEngine_ResumesPendingExecutions(t *testing.T) {
 	t.Parallel()
 	ctx := testutils.Context(t)
-	reg := coreCap.NewRegistry(logger.TestLogger(t))
+	reg := testRegistry(t)
 
 	trigger := mockNoopTrigger(t)
 	resp, err := values.NewMap(map[string]any{
@@ -619,7 +617,7 @@ func TestEngine_ResumesPendingExecutions(t *testing.T) {
 func TestEngine_TimesOutOldExecutions(t *testing.T) {
 	t.Parallel()
 	ctx := testutils.Context(t)
-	reg := coreCap.NewRegistry(logger.TestLogger(t))
+	reg := testRegistry(t)
 
 	trigger := mockNoopTrigger(t)
 	resp, err := values.NewMap(map[string]any{
@@ -722,7 +720,7 @@ targets:
 func TestEngine_WrapsTargets(t *testing.T) {
 	t.Parallel()
 	ctx := testutils.Context(t)
-	reg := coreCap.NewRegistry(logger.TestLogger(t))
+	reg := testRegistry(t)
 
 	trigger, _ := mockTrigger(t)
 
@@ -768,7 +766,7 @@ func TestEngine_WrapsTargets(t *testing.T) {
 func TestEngine_GetsNodeInfoDuringInitialization(t *testing.T) {
 	t.Parallel()
 	ctx := testutils.Context(t)
-	reg := coreCap.NewRegistry(logger.TestLogger(t))
+	reg := testRegistry(t)
 
 	trigger, _ := mockTrigger(t)
 
@@ -786,7 +784,19 @@ func TestEngine_GetsNodeInfoDuringInitialization(t *testing.T) {
 			ID: "1",
 		},
 	}
+
 	retryCount := 0
+	reg.SetGetLocalNodeFunc(func(ctx context.Context) (capabilities.Node, error) {
+		n := capabilities.Node{}
+		err := errors.New("peer not initialized")
+		if retryCount > 0 {
+			n = node
+			err = nil
+		}
+		retryCount++
+		return n, err
+	})
+
 	eng, hooks := newTestEngine(
 		t,
 		reg,
@@ -795,17 +805,6 @@ func TestEngine_GetsNodeInfoDuringInitialization(t *testing.T) {
 			c.Store = dbstore
 			c.clock = clock
 			c.maxRetries = 2
-			c.retryMs = 0
-			c.GetLocalNode = func(ctx context.Context) (capabilities.Node, error) {
-				n := capabilities.Node{}
-				err := errors.New("peer not initialized")
-				if retryCount > 0 {
-					n = node
-					err = nil
-				}
-				retryCount++
-				return n, err
-			}
 		},
 	)
 	servicetest.Run(t, eng)
@@ -857,7 +856,7 @@ targets:
 
 func TestEngine_PassthroughInterpolation(t *testing.T) {
 	ctx := testutils.Context(t)
-	reg := coreCap.NewRegistry(logger.TestLogger(t))
+	reg := testRegistry(t)
 
 	trigger, _ := mockTrigger(t)
 

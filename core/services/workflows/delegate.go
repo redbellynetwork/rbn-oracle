@@ -44,7 +44,6 @@ func (d *Delegate) ServicesForSpec(_ context.Context, spec job.Job) ([]job.Servi
 		WorkflowOwner: spec.WorkflowSpec.WorkflowOwner,
 		WorkflowName:  spec.WorkflowSpec.WorkflowName,
 		Registry:      d.registry,
-		GetLocalNode:  d.getLocalNode,
 		Store:         d.store,
 	}
 	engine, err := NewEngine(cfg)

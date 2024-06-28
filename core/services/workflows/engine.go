@@ -215,7 +215,7 @@ func (e *Engine) init(ctx context.Context) {
 	retryErr := retryable(ctx, e.logger, e.retryMs, e.maxRetries, func() error {
 		// first wait for localDON to return a non-error response; this depends
 		// on the underlying peerWrapper returning the PeerID.
-		node, err := e.getLocalNode(ctx)
+		node, err := e.registry.GetLocalNode(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get donInfo: %w", err)
 		}
@@ -804,7 +804,6 @@ type Config struct {
 	QueueSize            int
 	NewWorkerTimeout     time.Duration
 	MaxExecutionDuration time.Duration
-	GetLocalNode         func(ctx context.Context) (capabilities.Node, error)
 	Store                store.Store
 
 	// For testing purposes only
@@ -845,12 +844,6 @@ func NewEngine(cfg Config) (engine *Engine, err error) {
 
 	if cfg.MaxExecutionDuration == 0 {
 		cfg.MaxExecutionDuration = defaultMaxExecutionDuration
-	}
-
-	if cfg.GetLocalNode == nil {
-		cfg.GetLocalNode = func(ctx context.Context) (capabilities.Node, error) {
-			return capabilities.Node{}, nil
-		}
 	}
 
 	if cfg.retryMs == 0 {
@@ -896,7 +889,6 @@ func NewEngine(cfg Config) (engine *Engine, err error) {
 		logger:               cfg.Lggr.Named("WorkflowEngine").With("workflowID", cfg.WorkflowID),
 		registry:             cfg.Registry,
 		workflow:             workflow,
-		getLocalNode:         cfg.GetLocalNode,
 		executionStates:      cfg.Store,
 		pendingStepRequests:  make(chan stepRequest, cfg.QueueSize),
 		newWorkerCh:          newWorkerCh,
