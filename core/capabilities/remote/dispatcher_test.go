@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	commonMocks "github.com/smartcontractkit/chainlink-common/pkg/types/mocks"
+	coreMocks "github.com/smartcontractkit/chainlink-common/pkg/types/core/mocks"
 	"github.com/smartcontractkit/chainlink/v2/core/capabilities/remote"
 	remotetypes "github.com/smartcontractkit/chainlink/v2/core/capabilities/remote/types"
 	"github.com/smartcontractkit/chainlink/v2/core/internal/testutils"
@@ -41,7 +41,7 @@ func TestDispatcher_CleanStartClose(t *testing.T) {
 	wrapper := mocks.NewPeerWrapper(t)
 	wrapper.On("GetPeer").Return(peer)
 	signer := mocks.NewSigner(t)
-	registry := commonMocks.NewCapabilitiesRegistry(t)
+	registry := coreMocks.NewCapabilitiesRegistry(t)
 
 	dispatcher := remote.NewDispatcher(wrapper, signer, registry, lggr)
 	require.NoError(t, dispatcher.Start(ctx))
@@ -62,7 +62,7 @@ func TestDispatcher_Receive(t *testing.T) {
 	wrapper.On("GetPeer").Return(peer)
 	signer := mocks.NewSigner(t)
 	signer.On("Sign", mock.Anything).Return(nil, errors.New("not implemented"))
-	registry := commonMocks.NewCapabilitiesRegistry(t)
+	registry := coreMocks.NewCapabilitiesRegistry(t)
 
 	dispatcher := remote.NewDispatcher(wrapper, signer, registry, lggr)
 	require.NoError(t, dispatcher.Start(ctx))
@@ -110,7 +110,7 @@ func TestDispatcher_RespondWithError(t *testing.T) {
 	wrapper.On("GetPeer").Return(peer)
 	signer := mocks.NewSigner(t)
 	signer.On("Sign", mock.Anything).Return([]byte{}, nil)
-	registry := commonMocks.NewCapabilitiesRegistry(t)
+	registry := coreMocks.NewCapabilitiesRegistry(t)
 
 	dispatcher := remote.NewDispatcher(wrapper, signer, registry, lggr)
 	require.NoError(t, dispatcher.Start(ctx))
