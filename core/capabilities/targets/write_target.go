@@ -12,8 +12,10 @@ import (
 	"github.com/smartcontractkit/chainlink-common/pkg/capabilities"
 	"github.com/smartcontractkit/chainlink-common/pkg/capabilities/consensus/ocr3/types"
 	commontypes "github.com/smartcontractkit/chainlink-common/pkg/types"
+	"github.com/smartcontractkit/chainlink-common/pkg/types/core"
 	"github.com/smartcontractkit/chainlink-common/pkg/values"
 	"github.com/smartcontractkit/chainlink/v2/core/logger"
+	"github.com/smartcontractkit/chainlink/v2/core/utils"
 )
 
 var (
@@ -29,9 +31,13 @@ type WriteTarget struct {
 	forwarderAddress string
 	capabilities.CapabilityInfo
 	lggr logger.Logger
+
+	// options for configuring local node info retrieval
+	registry         core.CapabilitiesRegistry
+	localNodeRetryMs int // how often to retry fetching local node info
 }
 
-func NewWriteTarget(lggr logger.Logger, id string, cr commontypes.ContractReader, cw commontypes.ChainWriter, forwarderAddress string) *WriteTarget {
+func NewWriteTarget(lggr logger.Logger, id string, cr commontypes.ContractReader, cw commontypes.ChainWriter, forwarderAddress string, registry core.CapabilitiesRegistry, localNodeInfoIntervalMsOpt ...int) *WriteTarget {
 	info := capabilities.MustNewCapabilityInfo(
 		id,
 		capabilities.CapabilityTypeTarget,
@@ -39,14 +45,23 @@ func NewWriteTarget(lggr logger.Logger, id string, cr commontypes.ContractReader
 	)
 
 	logger := lggr.Named("WriteTarget")
+	localNodeInfoIntervalMs := 5000
+	if len(localNodeInfoIntervalMsOpt) == 1 {
+		localNodeInfoIntervalMs = localNodeInfoIntervalMsOpt[0]
+	}
 
-	return &WriteTarget{
+	wt := &WriteTarget{
 		cr,
 		cw,
 		forwarderAddress,
 		info,
 		logger,
+		registry,
+		localNodeInfoIntervalMs,
 	}
+
+	wt.ResolveLocalNodeInfo(context.Background())
+	return wt
 }
 
 type EvmConfig struct {
@@ -70,6 +85,32 @@ func success() <-chan capabilities.CapabilityResponse {
 		close(callback)
 	}()
 	return callback
+}
+
+// ResolveLocalNodeInfo fetches the local node info and updates the logger with the peerID and workflowDONID
+func (cap *WriteTarget) ResolveLocalNodeInfo(ctx context.Context) {
+	if cap.registry == nil {
+		cap.lggr.Warn("Capabilities registry not set, skipping ResolveLocalNodeInfo")
+		return
+	}
+
+	fmt.Println("resolving local node info")
+	go func() {
+		utils.Retryable(ctx, cap.lggr.Errorf, cap.localNodeRetryMs, 0, func() error {
+			fmt.Println("resolve local node info")
+			node, err := cap.registry.GetLocalNode(ctx)
+			if err != nil {
+				return err
+			}
+			if node.PeerID == nil {
+				return fmt.Errorf("local node not found or not part of DON")
+			}
+
+			cap.lggr = cap.lggr.With("peerID", node.PeerID, "workflowDONID", node.WorkflowDON.ID)
+			cap.lggr.Debug("Resolved local node info")
+			return nil
+		})
+	}()
 }
 
 func (cap *WriteTarget) Execute(ctx context.Context, request capabilities.CapabilityRequest) (<-chan capabilities.CapabilityResponse, error) {

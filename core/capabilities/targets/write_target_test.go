@@ -4,18 +4,23 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/smartcontractkit/chainlink-common/pkg/capabilities"
 	"github.com/smartcontractkit/chainlink-common/pkg/values"
+
+	coreCapabilities "github.com/smartcontractkit/chainlink/v2/core/capabilities"
 	"github.com/smartcontractkit/chainlink/v2/core/capabilities/targets"
 	"github.com/smartcontractkit/chainlink/v2/core/capabilities/targets/mocks"
 	"github.com/smartcontractkit/chainlink/v2/core/internal/testutils"
 	"github.com/smartcontractkit/chainlink/v2/core/logger"
+	p2ptypes "github.com/smartcontractkit/chainlink/v2/core/services/p2p/types"
 )
 
 //go:generate mockery --quiet --name ChainWriter --srcpkg=github.com/smartcontractkit/chainlink-common/pkg/types --output ./mocks/ --case=underscore
@@ -31,7 +36,7 @@ func TestWriteTarget(t *testing.T) {
 	forwarderA := testutils.NewAddress()
 	forwarderAddr := forwarderA.Hex()
 
-	writeTarget := targets.NewWriteTarget(lggr, "test-write-target@1.0.0", cr, cw, forwarderAddr)
+	writeTarget := targets.NewWriteTarget(lggr, "test-write-target@1.0.0", cr, cw, forwarderAddr, nil)
 	require.NotNil(t, writeTarget)
 
 	config, err := values.NewMap(map[string]any{
@@ -146,4 +151,37 @@ func TestWriteTarget(t *testing.T) {
 		_, err = writeTarget.Execute(ctx, req)
 		require.Error(t, err)
 	})
+}
+func TestResolveLocalNodeInfo(t *testing.T) {
+	lggr, observedLogs := logger.TestLoggerObserved(t, zapcore.DebugLevel)
+
+	cw := mocks.NewChainWriter(t)
+	cr := mocks.NewChainReader(t)
+	forwarderA := testutils.NewAddress()
+	forwarderAddr := forwarderA.Hex()
+	registry := coreCapabilities.NewRegistry(lggr)
+
+	writeTarget := targets.NewWriteTarget(lggr, "test-write-target@1.0.0", cr, cw, forwarderAddr, registry, 10)
+	require.NotNil(t, writeTarget)
+
+	peerIDLogs := observedLogs.FilterFieldKey("peerID")
+	require.Equal(t, peerIDLogs.Len(), 0, "we should not have any peerID sugared logs before the registry returns anything")
+	workflowDONIDLogs := observedLogs.FilterFieldKey("workflowDONID")
+	require.Equal(t, workflowDONIDLogs.Len(), 0, "we should not have any workflowDONID sugared logs before the registry returns anything")
+
+	registry.SetGetLocalNodeFunc(func(ctx context.Context) (capabilities.Node, error) {
+		var pid p2ptypes.PeerID
+		return capabilities.Node{
+			PeerID: &pid,
+			WorkflowDON: capabilities.DON{
+				ID: "don-id",
+			},
+		}, nil
+	})
+
+	time.Sleep(50 * time.Millisecond)
+	peerIDLogs = observedLogs.FilterFieldKey("peerID")
+	require.Greater(t, peerIDLogs.Len(), 0, "we should have some peerID sugared logs after the registry returns something")
+	workflowDONIDLogs = observedLogs.FilterFieldKey("workflowDONID")
+	require.Greater(t, workflowDONIDLogs.Len(), 0, "we should have some workflowDONID sugared logs after the registry returns something")
 }

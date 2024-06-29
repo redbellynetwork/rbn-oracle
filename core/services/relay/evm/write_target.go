@@ -83,5 +83,5 @@ func NewWriteTarget(ctx context.Context, relayer *Relayer, chain legacyevm.Chain
 		return nil, err
 	}
 
-	return targets.NewWriteTarget(l, id, cr, cw, forwarderAddress), nil
+	return targets.NewWriteTarget(l, id, cr, cw, forwarderAddress, relayer.capabilitiesRegistry), nil
 }
