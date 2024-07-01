@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"golang.org/x/exp/maps"
 
 	llotypes "github.com/smartcontractkit/chainlink-common/pkg/types/llo"
 	"github.com/smartcontractkit/chainlink-data-streams/llo"
@@ -92,7 +93,7 @@ func (d *dataSource) Observe(ctx context.Context, streamValues llo.StreamValues,
 		d.lggr.Debugw("Observing streams", "streamIDs", streamIDs, "seqNr", opts.SeqNr())
 	}
 
-	for streamID := range streamValues {
+	for _, streamID := range maps.Keys(streamValues) {
 		go func(streamID llotypes.StreamID) {
 			defer wg.Done()
 
