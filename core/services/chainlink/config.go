@@ -43,7 +43,7 @@ type Config struct {
 
 	Starknet stkcfg.TOMLConfigs `toml:",omitempty"`
 
-	Aptos []*RawConfig `toml:",omitempty"`
+	Aptos RawConfigs `toml:",omitempty"`
 }
 
 // RawConfig is the config used for chains that are not embedded.
@@ -55,8 +55,13 @@ type RawConfigs []RawConfig
 // ValidateConfig returns an error if the Config is not valid for use, as-is.
 func (c *RawConfig) ValidateConfig() error {
 	if v, ok := (*c)["Enabled"]; ok {
-		if _, ok := v.(*bool); !ok {
-			return fmt.Errorf("invalid type for Enabled: got %T, expected *bool", v)
+		if _, ok := v.(bool); !ok {
+			return fmt.Errorf("invalid type for Enabled: got %T, expected bool", v)
+		}
+	}
+	if v, ok := (*c)["ChainID"]; ok {
+		if _, ok := v.(string); !ok {
+			return fmt.Errorf("invalid type for ChainID: got %T, expected string", v)
 		}
 	}
 
@@ -68,7 +73,8 @@ func (c *RawConfig) IsEnabled() bool {
 		return false
 	}
 
-	return (*c)["Enabled"] == nil || *(*c)["Enabled"].(*bool)
+	enabled, ok := (*c)["Enabled"].(bool)
+	return ok && enabled
 }
 
 func (c *RawConfig) ChainID() string {
@@ -76,8 +82,8 @@ func (c *RawConfig) ChainID() string {
 		return ""
 	}
 
-	chainID, _ := (*c)["ChainID"].(*string)
-	return *chainID
+	chainID, _ := (*c)["ChainID"].(string)
+	return chainID
 }
 
 // TOMLString returns a TOML encoded string.
@@ -179,6 +185,9 @@ func (c *Config) SetFrom(f *Config) (err error) {
 	if err4 := c.Starknet.SetFrom(&f.Starknet); err4 != nil {
 		err = multierr.Append(err, commonconfig.NamedMultiErrorList(err4, "Starknet"))
 	}
+
+	// the plugin should handle it's own defaults and merging
+	c.Aptos = f.Aptos
 
 	_, err = commonconfig.MultiErrorList(err)
 
